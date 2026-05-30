@@ -328,7 +328,7 @@
     <button class="btn btn-download" id="dl-btn" onclick="togglePop('dlMenu', event)">&#11015; Download Invite</button>
     <div class="pop" id="dlMenu">
       <button class="pop-option" onclick="downloadPDF()">&#128196; Save as PDF</button>
-      <button class="pop-option" onclick="downloadJPEG()">&#128247; Save as JPEG</button>
+      <button class="pop-option" onclick="downloadJPEG()">&#128247; Download Image</button>
     </div>
   </div>
   <button class="btn btn-info" onclick="openInfo()">&#8505; Additional Info &amp; Parking</button>
@@ -465,18 +465,163 @@
     setTimeout(function(){ hide.forEach(function(el){ el.style.display = ''; }); }, 300);
   }
 
-  // ── DOWNLOAD: JPEG ──
+  // ── DOWNLOAD: PNG (canvas-drawn, reliable) ──
   function downloadJPEG(){
     closeAllPops();
-    var card = document.getElementById('invite-card');
-    if (typeof html2canvas !== 'undefined'){
-      html2canvas(card, { scale: 2, useCORS: true, backgroundColor: '#0e0202' }).then(function(canvas){
-        var link = document.createElement('a');
-        link.download = 'tashii_white_convocation_invite.jpg';
-        link.href = canvas.toDataURL('image/jpeg', 0.92);
-        link.click();
-      });
-    } else { alert('Image export is loading - please try again in a moment.'); }
+    var btn = document.getElementById('dl-btn');
+    btn.textContent = 'Generating...';
+    btn.disabled = true;
+
+    var canvas = document.createElement('canvas');
+    var W = 1840, H = 1160;
+    canvas.width  = W;
+    canvas.height = H;
+    var ctx = canvas.getContext('2d');
+
+    // Background
+    ctx.fillStyle = '#0e0202';
+    ctx.fillRect(0, 0, W, H);
+
+    // Card background
+    var cardX = 40, cardY = 40, cardW = W-80, cardH = H-80;
+    ctx.fillStyle = '#5a0000';
+    ctx.fillRect(cardX, cardY, cardW, cardH);
+
+    var photoW = Math.round(cardW * 0.42);
+    var infoX  = cardX + photoW;
+    var infoW  = cardW - photoW;
+
+    // Draw photo from the embedded img tag
+    var imgEl = document.querySelector('.grad-photo');
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(cardX, cardY, photoW, cardH);
+    ctx.clip();
+    // Scale/position to fill left panel, top-aligned
+    var scale = Math.max(photoW / imgEl.naturalWidth, cardH / imgEl.naturalHeight);
+    var dw = imgEl.naturalWidth  * scale;
+    var dh = imgEl.naturalHeight * scale;
+    var dx = cardX + (photoW - dw) / 2;
+    var dy = cardY;
+    ctx.drawImage(imgEl, dx, dy, dw, dh);
+    ctx.restore();
+
+    // Subtle bottom gradient over photo
+    var grad = ctx.createLinearGradient(cardX, cardY + cardH - 100, cardX, cardY + cardH);
+    grad.addColorStop(0, 'rgba(40,0,0,0)');
+    grad.addColorStop(1, 'rgba(40,0,0,0.7)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(cardX, cardY + cardH - 100, photoW, 100);
+
+    // Gold corner accents on photo
+    ctx.strokeStyle = 'rgba(201,168,76,0.8)';
+    ctx.lineWidth = 3;
+    var c = 36;
+    ctx.beginPath(); ctx.moveTo(cardX+18, cardY+18+c); ctx.lineTo(cardX+18, cardY+18); ctx.lineTo(cardX+18+c, cardY+18); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cardX+photoW-18-c, cardY+cardH-18); ctx.lineTo(cardX+photoW-18, cardY+cardH-18); ctx.lineTo(cardX+photoW-18, cardY+cardH-18-c); ctx.stroke();
+
+    // Right panel: cream background
+    ctx.fillStyle = '#F9F3E8';
+    ctx.fillRect(infoX, cardY, infoW, cardH - 70);
+
+    // Footer bar
+    ctx.fillStyle = '#5a0000';
+    ctx.fillRect(infoX, cardY + cardH - 70, infoW, 70);
+
+    // Text helpers
+    function txt(text, x, y, font, color, maxW) {
+      ctx.font = font; ctx.fillStyle = color;
+      if (maxW) ctx.fillText(text, x, y, maxW);
+      else ctx.fillText(text, x, y);
+    }
+
+    var tx = infoX + 88;
+
+    // Eyebrow
+    ctx.font = '600 26px Montserrat, sans-serif';
+    ctx.fillStyle = '#8B0000';
+    ctx.letterSpacing = '8px';
+    txt("YOU'RE INVITED TO CELEBRATE", tx, cardY + 110, '600 24px Montserrat, sans-serif', '#8B0000');
+
+    // Italic line
+    txt('the convocation of', tx, cardY + 158, 'italic 34px Georgia, serif', 'rgba(26,10,10,0.5)');
+
+    // Name
+    ctx.font = 'bold 112px Georgia, serif';
+    ctx.fillStyle = '#5a0000';
+    ctx.fillText('Tashii', tx, cardY + 295);
+    ctx.fillText('White', tx, cardY + 415);
+
+    // Degree text
+    ctx.font = '32px Georgia, serif';
+    ctx.fillStyle = 'rgba(26,10,10,0.7)';
+    ctx.fillText('Bachelor of Engineering · Mechanical', tx, cardY + 490);
+    ctx.fillText('Gina Cody School of Engineering & Computer Science', tx, cardY + 534);
+    ctx.fillText('Concordia University', tx, cardY + 578);
+
+    // Gold divider line
+    var divGrad = ctx.createLinearGradient(tx, 0, tx+120, 0);
+    divGrad.addColorStop(0, '#8B0000');
+    divGrad.addColorStop(1, '#C9A84C');
+    ctx.fillStyle = divGrad;
+    ctx.fillRect(tx, cardY + 610, 120, 4);
+
+    // Detail items
+    function detailItem(label, value, y) {
+      ctx.font = '600 20px Montserrat, sans-serif';
+      ctx.fillStyle = 'rgba(26,10,10,0.45)';
+      ctx.fillText(label.toUpperCase(), tx + 40, y);
+      ctx.font = '34px Georgia, serif';
+      ctx.fillStyle = '#1a0a0a';
+      // handle multi-line value by splitting on 
+
+      var lines = value.split('
+');
+      lines.forEach(function(line, i){ ctx.fillText(line, tx + 40, y + 42 + (i * 44)); });
+    }
+
+    // Calendar icon (simple)
+    function drawIcon(x, y) {
+      ctx.strokeStyle = '#8B0000'; ctx.lineWidth = 2.5;
+      ctx.strokeRect(x, y-22, 28, 28);
+      ctx.beginPath(); ctx.moveTo(x+8, y-26); ctx.lineTo(x+8, y-18); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x+20, y-26); ctx.lineTo(x+20, y-18); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, y-10); ctx.lineTo(x+28, y-10); ctx.stroke();
+    }
+    drawIcon(tx, cardY + 660);
+    detailItem('Date', 'Monday, June 16, 2026', cardY + 640);
+
+    drawIcon(tx, cardY + 760);
+    detailItem('Ceremony Time', '10:00 AM – 12:00 PM  |  Guests arrive by 9:15 AM', cardY + 740);
+
+    drawIcon(tx, cardY + 860);
+    detailItem('Venue', 'Place des Arts
+1450 Rue St-Urbain, Montréal, QC', cardY + 840);
+
+    // Footer text
+    ctx.font = '21px Montserrat, sans-serif';
+    ctx.fillStyle = 'rgba(249,243,232,0.65)';
+    ctx.fillText('Please arrive no later than 9:15 AM  ·  Dress code: smart formal  ·  Ceremony ends at 12:00 PM', infoX + 30, cardY + cardH - 28);
+    ctx.font = 'italic 30px Georgia, serif';
+    ctx.fillStyle = '#C9A84C';
+    ctx.textAlign = 'right';
+    ctx.fillText('Concordia University', cardX + cardW - 30, cardY + cardH - 28);
+    ctx.textAlign = 'left';
+
+    // Gold border around entire card
+    ctx.strokeStyle = 'rgba(201,168,76,0.4)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cardX, cardY, cardW, cardH);
+
+    // Export as PNG
+    canvas.toBlob(function(blob){
+      var link = document.createElement('a');
+      link.download = 'Tashii_White_Convocation_Invite.png';
+      link.href = URL.createObjectURL(blob);
+      link.click();
+      btn.textContent = '\u2b07 Download Invite';
+      btn.disabled = false;
+    }, 'image/png');
   }
 
   // ── ADD TO CALENDAR: Google ──
@@ -528,6 +673,6 @@
     }
   }
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
 </body>
 </html>
